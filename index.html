@@ -247,7 +247,41 @@
         #realtime-analysis { margin-top: 30px; padding-top: 20px; border-top: 2px solid var(--border); width: 100%; position: relative; }
         /* 캔버스 높이 300px -> 400px로 확장 및 커서 변경 */
         #scatter-canvas { width: 100%; height: 400px; background: #FAFAFA; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; cursor: crosshair; }
-        #analysis-log { font-size: 0.9rem; color: #4B5563; max-height: 150px; overflow-y: auto; padding: 10px; background: var(--bg-color); border-radius: 8px; }
+        #analysis-log { font-size: 0.9rem; color: #4B5563; max-height: 150px; overflow-y: auto; padding: 10px; background: var(--bg-color); border-radius: 8px; display: none; } /* 이제 뷰어로 대체하므로 기존 로그는 숨김 */
+
+        /* 라운드 기록 뷰어 UI */
+        #history-viewer {
+            background: var(--surface);
+            border: 2px solid var(--primary);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px rgba(79, 70, 229, 0.1);
+        }
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+        .history-nav-btn {
+            background: var(--bg-color);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 5px 15px;
+            cursor: pointer;
+            font-weight: bold;
+            color: var(--text-main);
+            transition: all 0.2s;
+        }
+        .history-nav-btn:hover:not(:disabled) { background: var(--primary); color: white; border-color: var(--primary); }
+        .history-nav-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        #history-title { font-size: 1.1rem; font-weight: bold; color: var(--primary); }
+        
+        .history-content { display: flex; flex-direction: column; gap: 8px; font-size: 0.95rem; }
+        .history-dice-row { display: flex; align-items: center; gap: 10px; }
 
         /* 캔버스 전용 스마트 툴팁 (마우스 오버 시 등장) */
         #canvas-tooltip {
@@ -301,7 +335,7 @@
 
 <div class="container">
     <header>
-        <h1>🎲 요트 확률 교실 <span class="version-badge" id="version-btn" title="업데이트 내역 보기">v1.9 📝</span></h1>
+        <h1>🎲 요트 확률 교실 <span class="version-badge" id="version-btn" title="업데이트 내역 보기">v3.0 📝</span></h1>
         <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; align-items: center;">
             <button id="header-reset-btn" class="header-btn" title="현재 게임을 완전히 초기화합니다.">🔄 초기화</button>
             <select id="skin-selector" style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text-main); font-weight: bold;">
@@ -374,11 +408,23 @@
             </div>
         </div>
         <p class="info-text" style="text-align: left; margin-bottom: 15px; margin-top: 5px;">
-            <strong style="color:#9CA3AF">회색 점</strong>: 각 조합의 수학적 달성 확률과 '평균 목표 점수' (마우스를 올려보세요!)<br>
-            <strong style="color:var(--success)">초록색 점</strong>: 목표 점수 이상 획득 (대성공!)<br>
-            <strong style="color:#F59E0B">노란색 점</strong>: 점수는 얻었으나 목표치보단 낮음 (아쉬움)<br>
-            <strong style="color:var(--danger)">빨간색 점</strong>: 0점 기록 (실패...)
+            <strong style="color:#9CA3AF">회색 점</strong>: 각 조합의 위치 (가로=달성 확률, 세로=획득 점수) — 마우스를 올려보세요!<br>
+            <strong style="color:#B45309">A 왼쪽 위</strong>: 어렵지만 고득점 · <strong style="color:#057A55">B 오른쪽 위</strong>: 황금 구역(비어 있음!) · <strong style="color:#2563EB">C 오른쪽 아래</strong>: 쉽지만 저득점 · <strong style="color:#6B7280">D 왼쪽 아래</strong>: 낮음·낮음<br>
+            <strong style="color:var(--success)">초록 점</strong>: 목표 이상 달성 · <strong style="color:#F59E0B">노란 점</strong>: 목표 미달 · <strong style="color:var(--danger)">빨간 점</strong>: 0점 기록 (내 기록)
         </p>
+        
+        <!-- 라운드 기록 뷰어 추가 -->
+        <div id="history-viewer" class="hidden">
+            <div class="history-header">
+                <button class="history-nav-btn" id="history-prev-btn">◀ 이전</button>
+                <span id="history-title">1라운드 기록</span>
+                <button class="history-nav-btn" id="history-next-btn">다음 ▶</button>
+            </div>
+            <div id="history-content" class="history-content">
+                <!-- JS로 주사위와 선택 내역이 렌더링 됨 -->
+            </div>
+        </div>
+
         <canvas id="scatter-canvas"></canvas>
         <div id="canvas-tooltip" class="hidden"></div>
         <div id="analysis-log">선택을 기록하면 이곳에 기댓값 분석 로그가 실시간으로 쌓입니다.</div>
@@ -394,28 +440,25 @@
         </div>
         <div class="modal-body">
             <div class="version-item">
-                <span class="v-tag">v1.9</span> <span class="v-date">현재 버전</span>
+                <span class="v-tag">v3.0</span> <span class="v-date">산점도 직관화 & 수학 복기 강화</span>
                 <ul>
-                    <li>못생긴 텍스트(유니코드) 주사위 폐기, <strong>인게임과 동일한 고해상도 SVG 미니 주사위</strong>를 툴팁에 적용</li>
-                    <li>산점도 표 및 카테고리 기호 직관적인 이모지(1️⃣, 2️⃣...)로 전체 교체</li>
+                    <li>산점도에 <strong>사분면 영역 음영(A·B·C·D) + 의미 라벨</strong> 추가 — '위치=의미'로 직관화</li>
+                    <li><strong>황금 구역(B영역)이 비어 있음</strong>을 점선·강조 표시 (확률·점수 동시 높은 조합은 없다는 핵심 발견 시각화)</li>
+                    <li>1의 합~6의 합을 <strong>각각 독립된 점</strong>으로 세로 사다리 형태 분리 표시</li>
+                    <li>모든 달성 확률을 <strong>몬테카를로 시뮬레이션(20만 회)으로 재계산해 통일</strong> (예: 포 오브 어 카인드 15%→28% 보정)</li>
+                    <li>복기 뷰어에 <strong>수학적 판단 3종</strong> 추가: ①기댓값 비교 ②그 주사위로 가능했던 최선의 선택 ③타이밍 전략 조언</li>
                 </ul>
             </div>
             <div class="version-item">
-                <span class="v-tag">v1.8</span> <span class="v-date">이전 버전</span>
+                <span class="v-tag">v2.0</span> <span class="v-date">대규모 업데이트</span>
                 <ul>
-                    <li>조합 설명 툴팁 및 산점도 툴팁이 <strong>화면 밖으로 잘리는(Clipping) 현상 완벽 수정</strong></li>
-                    <li>모바일 환경에서 툴팁이 화면 너비에 맞게 자동 조절(반응형 레이아웃)되도록 최적화</li>
+                    <li>산점도 내 데이터 겹침(떡짐) 방지를 위한 <strong>미세 퍼짐(Jitter) 효과</strong> 도입</li>
+                    <li>산점도와 연동되는 <strong>'라운드 기록 뷰어'</strong> 추가 (좌우 화살표로 복기 가능)</li>
+                    <li>기록 뷰어 조작 시 <strong>해당 라운드의 산점도 타겟 하이라이트</strong> 기능 연동</li>
                 </ul>
             </div>
             <div class="version-item">
-                <span class="v-tag">v1.7</span> <span class="v-date">이전 버전</span>
-                <ul>
-                    <li>조합 설명(툴팁) 내 <strong>주사위 이모지 크기 대폭 확대</strong> 및 가독성 개선</li>
-                    <li>툴팁 레이아웃 줄바꿈 최적화 및 팝업 위치 중앙 정렬</li>
-                </ul>
-            </div>
-            <div class="version-item">
-                <span class="v-tag">v1.6</span> <span class="v-date">이전 버전</span>
+                <span class="v-tag">v1.9</span> <span class="v-date">이전 버전</span>
                 <ul>
                     <li>산점도 겹침 현상 해결을 위한 <strong>'내 기록만 보기' 필터 스위치</strong> 추가</li>
                     <li>조합 예시 툴팁을 숫자가 아닌 <strong>직관적인 주사위 기호(⚀~⚅)</strong>로 시각화 변경</li>
@@ -487,18 +530,18 @@
 
     // 아이콘(icon) 및 최대 점수(maxScore) 속성 업데이트 (미니 SVG 주사위 적용)
     const CATEGORIES = [
-        { id: 'ones', icon: '1️⃣', name: '1의 합', desc: '1이 나온 주사위 눈의 합', tooltip: `예:<br>${miniDice([1, 1, 1, 3, 5])}<br>➔ (1×3) = 3점`, baseProb: 95, targetScore: 3, maxScore: 5 },
-        { id: 'twos', icon: '2️⃣', name: '2의 합', desc: '2가 나온 주사위 눈의 합', tooltip: `예:<br>${miniDice([2, 2, 4, 5, 6])}<br>➔ (2×2) = 4점`, baseProb: 95, targetScore: 6, maxScore: 10 },
-        { id: 'threes', icon: '3️⃣', name: '3의 합', desc: '3이 나온 주사위 눈의 합', tooltip: `예:<br>${miniDice([3, 3, 3, 3, 1])}<br>➔ (3×4) = 12점`, baseProb: 95, targetScore: 9, maxScore: 15 },
-        { id: 'fours', icon: '4️⃣', name: '4의 합', desc: '4가 나온 주사위 눈의 합', tooltip: `예:<br>${miniDice([4, 4, 1, 2, 5])}<br>➔ (4×2) = 8점`, baseProb: 95, targetScore: 12, maxScore: 20 },
-        { id: 'fives', icon: '5️⃣', name: '5의 합', desc: '5가 나온 주사위 눈의 합', tooltip: `예:<br>${miniDice([5, 5, 5, 2, 2])}<br>➔ (5×3) = 15점`, baseProb: 95, targetScore: 15, maxScore: 25 },
-        { id: 'sixes', icon: '6️⃣', name: '6의 합', desc: '6이 나온 주사위 눈의 합', tooltip: `예:<br>${miniDice([6, 6, 6, 6, 3])}<br>➔ (6×4) = 24점`, baseProb: 95, targetScore: 18, maxScore: 30 },
-        { id: 'choice', icon: '🌟', name: '초이스', desc: '모든 주사위 눈의 합', tooltip: `어떤 조합이든 상관없이 모두 더함.<br>예:<br>${miniDice([1, 3, 4, 5, 6])}<br>➔ 19점`, baseProb: 100, targetScore: 22, maxScore: 30 },
-        { id: 'fourOfKind', icon: '🍀', name: '포 오브 어 카인드', desc: '같은 눈 4개 이상 (모든 눈의 합)', tooltip: `예:<br>${miniDice([4, 4, 4, 4, 2])}<br>➔ (4+4+4+4+2) = 18점`, baseProb: 15, targetScore: 20, maxScore: 30 },
-        { id: 'fullHouse', icon: '🏠', name: '풀 하우스', desc: '같은 눈 3개 + 2개 (모든 눈의 합)', tooltip: `예:<br>${miniDice([3, 3, 3, 5, 5])}<br>➔ (3+3+3+5+5) = 19점`, baseProb: 30, targetScore: 22, maxScore: 30 },
-        { id: 'smallStraight', icon: '📶', name: '스몰 스트레이트', desc: '주사위 4개가 연속 (15점)', tooltip: `${miniDice([1, 2, 3, 4])}<br>처럼 4개가 연속될 때<br>➔ 고정 15점`, baseProb: 60, targetScore: 15, maxScore: 15 },
-        { id: 'largeStraight', icon: '🎢', name: '라지 스트레이트', desc: '주사위 5개가 연속 (30점)', tooltip: `${miniDice([1, 2, 3, 4, 5])}<br>처럼 5개가 연속될 때<br>➔ 고정 30점`, baseProb: 25, targetScore: 30, maxScore: 30 },
-        { id: 'yacht', icon: '🚢', name: '요트', desc: '모든 주사위가 같은 눈 (50점)', tooltip: `예:<br>${miniDice([6, 6, 6, 6, 6])}<br>➔ 고정 50점 대박!`, baseProb: 4, targetScore: 50, maxScore: 50 }
+        { id: 'ones', icon: '1️⃣', name: '1의 합', desc: '1이 나온 주사위 눈의 합', tooltip: `예:<br>${miniDice([1, 1, 1, 3, 5])}<br>➔ (1×3) = 3점`, baseProb: 94, targetScore: 3, maxScore: 5, avgEV: 2.1 },
+        { id: 'twos', icon: '2️⃣', name: '2의 합', desc: '2가 나온 주사위 눈의 합', tooltip: `예:<br>${miniDice([2, 2, 4, 5, 6])}<br>➔ (2×2) = 4점`, baseProb: 94, targetScore: 6, maxScore: 10, avgEV: 4.2 },
+        { id: 'threes', icon: '3️⃣', name: '3의 합', desc: '3이 나온 주사위 눈의 합', tooltip: `예:<br>${miniDice([3, 3, 3, 3, 1])}<br>➔ (3×4) = 12점`, baseProb: 94, targetScore: 9, maxScore: 15, avgEV: 6.3 },
+        { id: 'fours', icon: '4️⃣', name: '4의 합', desc: '4가 나온 주사위 눈의 합', tooltip: `예:<br>${miniDice([4, 4, 1, 2, 5])}<br>➔ (4×2) = 8점`, baseProb: 94, targetScore: 12, maxScore: 20, avgEV: 8.4 },
+        { id: 'fives', icon: '5️⃣', name: '5의 합', desc: '5가 나온 주사위 눈의 합', tooltip: `예:<br>${miniDice([5, 5, 5, 2, 2])}<br>➔ (5×3) = 15점`, baseProb: 94, targetScore: 15, maxScore: 25, avgEV: 10.5 },
+        { id: 'sixes', icon: '6️⃣', name: '6의 합', desc: '6이 나온 주사위 눈의 합', tooltip: `예:<br>${miniDice([6, 6, 6, 6, 3])}<br>➔ (6×4) = 24점`, baseProb: 94, targetScore: 18, maxScore: 30, avgEV: 12.6 },
+        { id: 'choice', icon: '🌟', name: '초이스', desc: '모든 주사위 눈의 합', tooltip: `어떤 조합이든 상관없이 모두 더함.<br>예:<br>${miniDice([1, 3, 4, 5, 6])}<br>➔ 19점`, baseProb: 100, targetScore: 22, maxScore: 30, avgEV: 23.1 },
+        { id: 'fourOfKind', icon: '🍀', name: '포 오브 어 카인드', desc: '같은 눈 4개 이상 (모든 눈의 합)', tooltip: `예:<br>${miniDice([4, 4, 4, 4, 2])}<br>➔ (4+4+4+4+2) = 18점`, baseProb: 28, targetScore: 20, maxScore: 30, avgEV: 5.3 },
+        { id: 'fullHouse', icon: '🏠', name: '풀 하우스', desc: '같은 눈 3개 + 2개 (모든 눈의 합)', tooltip: `예:<br>${miniDice([3, 3, 3, 5, 5])}<br>➔ (3+3+3+5+5) = 19점`, baseProb: 32, targetScore: 22, maxScore: 30, avgEV: 6.3 },
+        { id: 'smallStraight', icon: '📶', name: '스몰 스트레이트', desc: '주사위 4개가 연속 (15점)', tooltip: `${miniDice([1, 2, 3, 4])}<br>처럼 4개가 연속될 때<br>➔ 고정 15점`, baseProb: 58, targetScore: 15, maxScore: 15, avgEV: 8.6 },
+        { id: 'largeStraight', icon: '🎢', name: '라지 스트레이트', desc: '주사위 5개가 연속 (30점)', tooltip: `${miniDice([1, 2, 3, 4, 5])}<br>처럼 5개가 연속될 때<br>➔ 고정 30점`, baseProb: 24, targetScore: 30, maxScore: 30, avgEV: 7.3 },
+        { id: 'yacht', icon: '🚢', name: '요트', desc: '모든 주사위가 같은 눈 (50점)', tooltip: `예:<br>${miniDice([6, 6, 6, 6, 6])}<br>➔ 고정 50점 대박!`, baseProb: 5, targetScore: 50, maxScore: 50, avgEV: 2.3 }
     ];
 
     let state = {
@@ -513,8 +556,9 @@
         gameStarted: false,
         isRolling: false,
         simulations: {},
-        chartDots: [], // 산점도 툴팁을 위한 좌표 저장 배열
-        showOnlyMyRecords: false // 내 기록만 보기 필터 상태
+        chartDots: [], 
+        showOnlyMyRecords: false,
+        currentViewRound: null // 현재 복기 중인 라운드 인덱스
     };
 
     let undoStack = [];
@@ -563,7 +607,12 @@
         versionBtn: document.getElementById('version-btn'),
         versionModal: document.getElementById('version-modal'),
         closeModalBtn: document.getElementById('close-modal-btn'),
-        filterRecordsToggle: document.getElementById('filter-records-toggle')
+        filterRecordsToggle: document.getElementById('filter-records-toggle'),
+        historyViewer: document.getElementById('history-viewer'),
+        historyPrevBtn: document.getElementById('history-prev-btn'),
+        historyNextBtn: document.getElementById('history-next-btn'),
+        historyTitle: document.getElementById('history-title'),
+        historyContent: document.getElementById('history-content')
     };
 
     function init() {
@@ -686,6 +735,10 @@
             state.showOnlyMyRecords = e.target.checked;
             drawAnalysis();
         });
+
+        // 뷰어 버튼 이벤트
+        elements.historyPrevBtn.addEventListener('click', () => changeHistoryView(-1));
+        elements.historyNextBtn.addEventListener('click', () => changeHistoryView(1));
     }
 
     function resetGame() {
@@ -694,11 +747,13 @@
             rollsLeft: 3, round: 1, scores: {}, history: [],
             teacherMode: elements.teacherToggle.checked, debugMode: elements.debugToggle.checked,
             gameStarted: false, isRolling: false, simulations: {}, chartDots: [],
-            showOnlyMyRecords: elements.filterRecordsToggle.checked
+            showOnlyMyRecords: elements.filterRecordsToggle.checked,
+            currentViewRound: null
         };
         undoStack = [];
         elements.undoBtn.disabled = true;
         elements.analysisLog.innerHTML = '선택을 기록하면 이곳에 기댓값 분석 로그가 실시간으로 쌓입니다.';
+        elements.historyViewer.classList.add('hidden');
         
         updateUI();
         updateProbabilitiesUI(); 
@@ -1108,9 +1163,13 @@
             catName: catData.name, 
             score: score, 
             baseProb: catData.baseProb, 
-            targetScore: catData.targetScore 
+            targetScore: catData.targetScore,
+            dice: [...state.dice] // 복기를 위해 주사위 상태 저장
         });
         
+        // 기록을 추가했으면 뷰어도 최신 라운드로 맞춰줌
+        state.currentViewRound = state.history.length - 1;
+        updateHistoryViewerUI();
         drawAnalysis();
 
         if (specialLog) {
@@ -1379,23 +1438,166 @@
     }
 
     /* =========================================
-       실시간 산점도 그래프 렌더링 로직
+       라운드 뷰어 로직 추가
+       ========================================= */
+    function changeHistoryView(delta) {
+        if (state.history.length === 0) return;
+        state.currentViewRound += delta;
+        if (state.currentViewRound < 0) state.currentViewRound = 0;
+        if (state.currentViewRound >= state.history.length) state.currentViewRound = state.history.length - 1;
+        updateHistoryViewerUI();
+        drawAnalysis(); // 뷰어가 바뀌면 캔버스의 하이라이트도 같이 이동!
+    }
+
+    function updateHistoryViewerUI() {
+        if (state.history.length === 0) {
+            elements.historyViewer.classList.add('hidden');
+            return;
+        }
+        elements.historyViewer.classList.remove('hidden');
+        
+        const idx = state.currentViewRound;
+        const data = state.history[idx];
+        elements.historyTitle.innerText = `${data.round}라운드 기록 복기`;
+        
+        elements.historyPrevBtn.disabled = state.currentViewRound === 0;
+        elements.historyNextBtn.disabled = state.currentViewRound === state.history.length - 1;
+
+        const catData = CATEGORIES.find(c => c.id === data.category);
+
+        let evalText = '';
+        if (data.score >= data.targetScore) evalText = `<span style="color:var(--success); font-weight:bold;">(목표치 ${data.targetScore}점 이상 달성! 훌륭함 🎯)</span>`;
+        else if (data.score > 0) evalText = `<span style="color:#F59E0B; font-weight:bold;">(목표치 ${data.targetScore}점에는 못 미침. 아쉽네 🤔)</span>`;
+        else evalText = `<span style="color:var(--danger); font-weight:bold;">(0점... 완전 실패 😢)</span>`;
+
+        // ===== 수학적 판단 1: 기댓값(평균)과 비교 =====
+        const avg = catData.avgEV;
+        let evJudge = '';
+        const diff = (data.score - avg).toFixed(1);
+        if (data.score === 0) {
+            evJudge = `이 칸의 평균 기댓값은 약 <strong>${avg}점</strong>인데, 0점을 기록했어요. 평균보다 <strong style="color:var(--danger)">${Math.abs(diff)}점 손해</strong>를 봤네요.`;
+        } else if (data.score >= avg) {
+            evJudge = `이 칸의 평균 기댓값은 약 <strong>${avg}점</strong>이에요. 평균보다 <strong style="color:var(--success)">${diff}점 더</strong> 얻었으니 효율 좋은 라운드였어요! 👍`;
+        } else {
+            evJudge = `이 칸의 평균 기댓값은 약 <strong>${avg}점</strong>인데 ${data.score}점을 받았어요. 평균보다 <strong style="color:#F59E0B">${Math.abs(diff)}점 적게</strong> 얻었어요.`;
+        }
+
+        // ===== 수학적 판단 2: 그 주사위로 가능했던 최선의 선택 (결과론적 분석) =====
+        const usedBefore = new Set(state.history.slice(0, idx).map(h => h.category));
+        const available = CATEGORIES.filter(c => !usedBefore.has(c.id)); // 그때 비어 있던 칸들 (선택한 칸 포함)
+        let alts = available.map(c => ({ cat: c, s: calculateScore(c.id, data.dice) }));
+        alts.sort((a, b) => b.s - a.s);
+        const best = alts[0];
+
+        let bestJudge = '';
+        if (best.cat.id === data.category || best.s === data.score) {
+            bestJudge = `✅ 이 주사위로 <strong>낼 수 있던 가장 높은 점수</strong>를 골랐어요. 결과적으로 최선의 선택!`;
+        } else if (best.s === 0) {
+            bestJudge = `이 주사위로는 어느 칸에 넣어도 점수가 없었어요. 한 칸을 비워야 하는 <strong>어쩔 수 없는 라운드</strong>였어요.`;
+        } else {
+            const gain = best.s - data.score;
+            bestJudge = `💡 같은 주사위를 <strong>${best.cat.name}</strong> 칸에 넣었다면 <strong style="color:var(--primary)">${best.s}점</strong>이었어요 (실제 ${data.score}점, ${gain}점 차이). 다만 그 칸은 더 좋은 주사위가 나올 때를 위해 아껴둘 수도 있어요.`;
+        }
+
+        // ===== 수학적 판단 3: 타이밍 전략 조언 =====
+        let timingTip = '';
+        const isEarly = data.round <= 4;
+        const isLate = data.round >= 9;
+        const highValueIds = ['yacht', 'largeStraight', 'fourOfKind'];
+        if (highValueIds.includes(data.category) && data.score === 0 && isEarly) {
+            timingTip = `⏳ <strong>${catData.name}</strong>는 점수가 큰 칸이에요. 초반에 0점으로 비우기보다, 후반까지 아껴 도전할 가치가 있어요.`;
+        } else if (data.category === 'choice' && isEarly) {
+            timingTip = `🛟 초이스는 항상 성공하는 '보험' 칸이에요. 가능하면 마지막 라운드까지 남겨두는 게 유리해요.`;
+        } else if (highValueIds.includes(data.category) && data.score > 0) {
+            timingTip = `🎉 어려운 고득점 칸(A영역)을 성공시켰어요. 산점도에서 왼쪽 위에 찍히는 값진 점수예요!`;
+        } else if (isLate && data.score > 0 && ['ones','twos','threes'].includes(data.category)) {
+            timingTip = `🧹 후반에 낮은 숫자 칸을 정리하는 건 좋은 마무리 전략이에요.`;
+        }
+
+        elements.historyContent.innerHTML = `
+            <div class="history-dice-row">
+                <span style="color:var(--text-muted);">최종 주사위:</span> 
+                ${miniDice(data.dice)}
+            </div>
+            <div><span style="color:var(--text-muted);">선택 조합:</span> <strong>${data.catName}</strong> <span style="font-size:0.85rem; color:var(--text-muted);">(달성 확률 약 ${data.baseProb}%)</span></div>
+            <div><span style="color:var(--text-muted);">획득 점수:</span> <strong>${data.score}점</strong> ${evalText}</div>
+            <div style="margin-top:8px; padding:10px 12px; background:rgba(99,102,241,0.06); border-radius:8px; border-left:3px solid var(--primary); line-height:1.6;">
+                <div style="font-weight:bold; color:var(--primary); margin-bottom:4px;">🔎 수학적 복기</div>
+                <div style="margin-bottom:5px;">📊 <strong>기댓값 비교:</strong> ${evJudge}</div>
+                <div style="margin-bottom:5px;">🎯 <strong>최선의 선택?</strong> ${bestJudge}</div>
+                ${timingTip ? `<div>${timingTip}</div>` : ''}
+            </div>
+        `;
+    }
+
+    /* =========================================
+       실시간 산점도 그래프 렌더링 로직 (수정됨)
        ========================================= */
     function drawAnalysis() {
         const canvas = elements.scatterCanvas;
         const ctx = canvas.getContext('2d');
         const width = canvas.width = canvas.offsetWidth;
-        const height = canvas.height = 400; // 높이를 300px에서 400px로 늘려서 1~6합 간격 확보
+        const height = canvas.height = 400; 
         const padding = 50;
 
         ctx.clearRect(0, 0, width, height);
-        state.chartDots = []; // 툴팁 좌표 초기화
+        state.chartDots = []; 
 
         const MAX_SCORE = 55; 
         const MAX_PROB = 105; 
 
         const mapX = (val) => padding + (val / MAX_PROB) * (width - padding * 2);
         const mapY = (val) => height - padding - (val / MAX_SCORE) * (height - padding * 2);
+
+        // ===== 사분면 영역 음영 (위치 = 의미) =====
+        const DIV_X = 50;   // 확률 기준선 50%
+        const DIV_Y = 25;   // 점수 기준선 25점
+        const x0 = mapX(0), xMid = mapX(DIV_X), x100 = mapX(100);
+        const y0 = mapY(0), yMid = mapY(DIV_Y), yTop = mapY(MAX_SCORE);
+
+        // A 영역(왼쪽 위): 어렵지만 고득점
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.10)';
+        ctx.fillRect(x0, yTop, xMid - x0, yMid - yTop);
+        // B 영역(오른쪽 위): 황금 구역 (비어 있음!)
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
+        ctx.fillRect(xMid, yTop, x100 - xMid, yMid - yTop);
+        // C 영역(오른쪽 아래): 쉽지만 저득점
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.07)';
+        ctx.fillRect(xMid, yMid, x100 - xMid, y0 - yMid);
+        // D 영역(왼쪽 아래): 낮은 확률·낮은 점수
+        ctx.fillStyle = 'rgba(107, 114, 128, 0.06)';
+        ctx.fillRect(x0, yMid, xMid - x0, y0 - yMid);
+
+        // B 황금 구역 점선 테두리 + "비어 있음" 강조
+        ctx.save();
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.7)'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+        ctx.strokeRect(xMid, yTop, x100 - xMid, yMid - yTop);
+        ctx.restore();
+
+        // 영역 라벨 (의미 명시)
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillStyle = 'rgba(180, 83, 9, 0.85)';
+        ctx.fillText('A · 어렵지만 고득점', (x0 + xMid) / 2, yTop + 22);
+        ctx.fillStyle = 'rgba(5, 122, 85, 0.9)';
+        ctx.fillText('B · 황금 구역', (xMid + x100) / 2, yTop + 22);
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = 'rgba(5, 122, 85, 0.75)';
+        ctx.fillText('(확률·점수 둘 다 높은 조합은 없다!)', (xMid + x100) / 2, yTop + 40);
+        ctx.font = 'bold 12px sans-serif';
+        ctx.fillStyle = 'rgba(37, 99, 235, 0.7)';
+        ctx.fillText('C · 자주 나오지만 저득점', (xMid + x100) / 2, y0 - 12);
+        ctx.fillStyle = 'rgba(75, 85, 99, 0.7)';
+        ctx.fillText('D · 낮은 확률·낮은 점수', (x0 + xMid) / 2, y0 - 12);
+
+        // 사분면 구분선
+        ctx.save();
+        ctx.strokeStyle = 'rgba(107,114,128,0.45)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(xMid, yTop); ctx.lineTo(xMid, y0);
+        ctx.moveTo(x0, yMid); ctx.lineTo(x100, yMid);
+        ctx.stroke();
+        ctx.restore();
 
         ctx.beginPath(); ctx.strokeStyle = '#E5E7EB'; ctx.lineWidth = 1;
         for(let i=0; i<=100; i+=20) {
@@ -1412,7 +1614,7 @@
         ctx.stroke();
 
         ctx.fillStyle = '#374151'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
-        ctx.fillText('일반적인 달성 확률 (%)', width / 2, height - 10);
+        ctx.fillText('달성 확률 (%) · 3번 굴려 최선을 다했을 때 기준', width / 2, height - 10);
         ctx.textAlign = 'right'; ctx.fillText('획득', padding - 10, height / 2 - 10); ctx.fillText('점수', padding - 10, height / 2 + 10);
 
         ctx.font = '10px sans-serif'; ctx.fillStyle = '#9CA3AF';
@@ -1428,24 +1630,19 @@
                 const tx = mapX(cat.baseProb);
                 const ty = mapY(cat.targetScore);
                 
-                // 밋밋한 원 대신 카테고리 고유 아이콘 렌더링
                 ctx.font = '16px sans-serif'; 
                 ctx.textAlign = 'center';
-                ctx.fillStyle = 'rgba(107, 114, 128, 0.6)'; // 반투명 회색
+                ctx.fillStyle = 'rgba(107, 114, 128, 0.6)'; 
                 ctx.fillText(cat.icon, tx, ty + 5);
 
-                // 라벨 텍스트: 우측(95~100%)에 몰린 애들은 글씨를 왼쪽에 써서 안 겹치게
                 ctx.font = '10px sans-serif';
                 ctx.fillStyle = 'rgba(107, 114, 128, 0.9)';
                 if (cat.baseProb > 80) {
-                    ctx.textAlign = 'right';
-                    ctx.fillText(cat.name, tx - 12, ty + 3);
+                    ctx.textAlign = 'right'; ctx.fillText(cat.name, tx - 12, ty + 3);
                 } else {
-                    ctx.textAlign = 'center';
-                    ctx.fillText(cat.name, tx, ty - 12);
+                    ctx.textAlign = 'center'; ctx.fillText(cat.name, tx, ty - 12);
                 }
 
-                // 호버 툴팁을 위해 좌표 저장
                 state.chartDots.push({ 
                     x: tx, y: ty, type: 'target', 
                     label: `${cat.icon} ${cat.name}`, 
@@ -1454,48 +1651,43 @@
             });
         }
 
-        elements.analysisLog.innerHTML = '<strong>선택 기록 실시간 분석:</strong><br>';
-        if (state.history.length === 0) elements.analysisLog.innerHTML += '<div style="color:var(--text-muted); margin-top:5px;">아직 기록된 점수가 없습니다. 게임을 진행해주세요.</div>';
+        state.history.forEach((data, index) => {
+            // 동일 확률, 동일 점수에서의 완벽한 겹침(떡짐) 방지를 위한 Jitter(미세 퍼짐) 효과
+            // 라운드 번호를 활용해 항상 같은 위치에 고정되도록 규칙적인 오프셋 생성
+            const jitterX = Math.sin(data.round * 123) * 6; 
+            const jitterY = Math.cos(data.round * 123) * 6;
 
-        state.history.forEach((data) => {
-            const x = mapX(data.baseProb); 
-            const y = mapY(data.score);
+            const x = mapX(data.baseProb) + jitterX; 
+            const y = mapY(data.score) + jitterY;
             
             let dotColor = '#F59E0B'; 
             if (data.score === 0) dotColor = '#EF4444'; 
             else if (data.score >= data.targetScore) dotColor = '#10B981'; 
 
-            // 플레이어 점은 눈에 띄게 큰 원으로 렌더링
-            ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fillStyle = dotColor; ctx.fill();
-            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+            // 현재 뷰어에서 보고 있는 라운드라면 하이라이트 (테두리를 두껍고 까맣게)
+            const isHighlighted = (index === state.currentViewRound);
 
-            ctx.fillStyle = '#1F2937'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'left';
-            ctx.fillText(data.round + 'R', x + 10, y + 4);
+            ctx.beginPath(); 
+            ctx.arc(x, y, isHighlighted ? 9 : 7, 0, Math.PI * 2); // 강조 시 원 크기도 살짝 키움
+            ctx.fillStyle = dotColor; 
+            ctx.fill();
+            
+            ctx.strokeStyle = isHighlighted ? '#1F2937' : '#fff'; 
+            ctx.lineWidth = isHighlighted ? 3 : 2; 
+            ctx.stroke();
 
-            // 호버 툴팁을 위해 좌표 저장 (나중에 겹치면 플레이어 점이 툴팁 우선순위 갖도록 함)
+            // 텍스트 위치도 Jitter에 맞춰 같이 이동
+            ctx.fillStyle = isHighlighted ? '#1F2937' : 'rgba(31, 41, 55, 0.8)'; 
+            ctx.font = isHighlighted ? 'bold 12px sans-serif' : 'bold 10px sans-serif'; 
+            ctx.textAlign = 'left';
+            ctx.fillText(data.round + 'R', x + (isHighlighted ? 12 : 10), y + 4);
+
             state.chartDots.push({ 
                 x: x, y: y, type: 'player', 
                 label: data.catName, 
                 round: data.round, prob: data.baseProb, score: data.score, targetScore: data.targetScore 
             });
-
-            let evalText = '';
-            if (data.score >= data.targetScore) evalText = `<span style="color:var(--success); font-weight:bold;">(목표치 ${data.targetScore}점 이상 달성! 훌륭함 🎯)</span>`;
-            else if (data.score > 0) evalText = `<span style="color:#F59E0B; font-weight:bold;">(목표치 ${data.targetScore}점에는 못 미침. 아쉽네 🤔)</span>`;
-            else evalText = `<span style="color:var(--danger); font-weight:bold;">(0점... 완전 실패 😢)</span>`;
-            
-            const logEntry = `
-                <div style="margin-top: 6px; padding-bottom: 6px; border-bottom: 1px dashed #E5E7EB;">
-                    [${data.round}라운드] <strong>${data.catName}</strong> 선택 ➔ <strong>${data.score}점</strong> 획득 
-                    <span style="font-size: 0.8em; color:var(--text-muted);">(보통 확률 ${data.baseProb}%, 기대점수 ${data.targetScore}점)</span><br>
-                    ${evalText}
-                </div>
-            `;
-            elements.analysisLog.innerHTML = logEntry + elements.analysisLog.innerHTML;
         });
-        
-        const currentLogs = elements.analysisLog.innerHTML.replace('<strong>선택 기록 실시간 분석:</strong><br>', '');
-        elements.analysisLog.innerHTML = '<strong>선택 기록 실시간 분석 (최신순):</strong><br>' + currentLogs;
     }
 
     init();
